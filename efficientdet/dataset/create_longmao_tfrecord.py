@@ -36,16 +36,16 @@ from dataset import tfrecord_util
 FLAGS = flags.FLAGS
 
 SETS = ['train', 'val', 'trainval', 'test']
-YEARS = ['VOC2007', 'VOC2012', 'merged']
 
 pascal_label_map_dict = {
     'background': 0,
-    'bicycle': 1,
+    # 'bicycle': 1,
     'bus': 2,
     'car': 3,
-    'motorcycle': 4,
+    # 'motorbike': 4,
     'person': 5,
-    'truck': 6
+    'truck': 6,
+    # 'non_motor_vehicle': 7
 }
 
 GLOBAL_IMG_ID = 0  # global image id.
@@ -54,14 +54,13 @@ GLOBAL_ANN_ID = 0  # global annotation id.
 
 def define_flags():
     """Define the flags."""
-    flags.DEFINE_string('data_dir', '/home/leizehua/workspace/data/',
-                        'Root directory to raw PASCAL VOC dataset.')
+    flags.DEFINE_string('data_dir', '/home/leizehua/workspace/data/self_labeled/voc',
+                        'Root directory to raw LongMao dataset.')
     flags.DEFINE_string('set', 'train', 'Convert training set, validation set or '
                                         'merged set.')
     flags.DEFINE_string('annotations_dir', 'Annotations',
                         '(Relative) path to annotations directory.')
-    flags.DEFINE_string('year', 'VOC2012', 'Desired challenge year.')
-    flags.DEFINE_string('output_path', '/home/leizehua/workspace/data/efficient_tfrecord/voc2012/', 'Path to output TFRecord and json.')
+    flags.DEFINE_string('output_path', '/home/leizehua/workspace/data/efficient_tfrecord/longmao/', 'Path to output TFRecord and json.')
     flags.DEFINE_string('label_map_json_path', None,
                         'Path to label map json file with a dictionary.')
     flags.DEFINE_boolean('ignore_difficult_instances', False, 'Whether to ignore '
@@ -149,11 +148,11 @@ def dict_to_tf_example(data,
     difficult_obj = []
     if 'object' in data:
         for obj in data['object']:
-            difficult = bool(int(obj['difficult']))
+            difficult = False
             if ignore_difficult_instances and difficult:
                 continue
             if obj['name'] not in pascal_label_map_dict.keys():
-                # print(obj['name'])
+                print(obj['name'])
                 continue
             difficult_obj.append(int(difficult))
 
@@ -164,8 +163,8 @@ def dict_to_tf_example(data,
             area.append((xmax[-1] - xmin[-1]) * (ymax[-1] - ymin[-1]))
             classes_text.append(obj['name'].encode('utf8'))
             classes.append(label_map_dict[obj['name']])
-            truncated.append(int(obj['truncated']))
-            poses.append(obj['pose'].encode('utf8'))
+            truncated.append(int(0))
+            poses.append('Unspecified'.encode('utf8'))
 
             if ann_json_dict:
                 abs_xmin = int(obj['bndbox']['xmin'])
@@ -230,15 +229,15 @@ def dict_to_tf_example(data,
 def main(_):
     if FLAGS.set not in SETS:
         raise ValueError('set must be in : {}'.format(SETS))
-    if FLAGS.year not in YEARS:
-        raise ValueError('year must be in : {}'.format(YEARS))
+    # if FLAGS.year not in YEARS:
+    #     raise ValueError('year must be in : {}'.format(YEARS))
     if not FLAGS.output_path:
         raise ValueError('output_path cannot be empty.')
 
     data_dir = FLAGS.data_dir
-    years = ['VOC2007', 'VOC2012']
-    if FLAGS.year != 'merged':
-        years = [FLAGS.year]
+    # years = ['VOC2007', 'VOC2012']
+    # if FLAGS.year != 'merged':
+    #     years = [FLAGS.year]
 
     output_dir = os.path.dirname(FLAGS.output_path)
     if not tf.io.gfile.exists(output_dir):
@@ -246,7 +245,7 @@ def main(_):
     logging.info('Writing to output directory: %s', output_dir)
 
     writers = [
-        tf.io.TFRecordWriter(FLAGS.output_path + 'val-%05d-of-%05d.tfrecord' %
+        tf.io.TFRecordWriter(FLAGS.output_path + FLAGS.set + '-%05d-of-%05d.tfrecord' %
                              (i, FLAGS.num_shards))
         for i in range(FLAGS.num_shards)
     ]
@@ -263,37 +262,32 @@ def main(_):
         'annotations': [],
         'categories': []
     }
-    for year in years:
-        example_class = list(label_map_dict.keys())[1]
-        examples_path = os.path.join(data_dir, year, 'ImageSets', 'Main',
-                                     example_class + '_' + FLAGS.set + '.txt')
-        examples_list = tfrecord_util.read_examples_list(examples_path)
-        annotations_dir = os.path.join(data_dir, year, FLAGS.annotations_dir)
 
-        for class_name, class_id in label_map_dict.items():
-            cls = {'supercategory': 'none', 'id': class_id, 'name': class_name}
-            ann_json_dict['categories'].append(cls)
+    # example_class = list(label_map_dict.keys())[1]
+    examples_path = os.path.join(data_dir, 'ImageSets', 'Main', FLAGS.set + '.txt')
+    examples_list = tfrecord_util.read_examples_list(examples_path)
+    annotations_dir = os.path.join(data_dir, FLAGS.annotations_dir)
 
-        logging.info('Reading from PASCAL %s dataset.', year)
-        for idx, example in enumerate(examples_list):
-            if FLAGS.num_images and idx >= FLAGS.num_images:
-                break
-            if idx % 100 == 0:
-                logging.info('On image %d of %d', idx, len(examples_list))
-            path = os.path.join(annotations_dir, example + '.xml')
-            with tf.io.gfile.GFile(path, 'r') as fid:
-                xml_str = fid.read()
-            xml = etree.fromstring(xml_str)
-            data = tfrecord_util.recursive_parse_xml_to_dict(xml)['annotation']
+    logging.info('Reading from LongMao dataset.')
+    for idx, example in enumerate(examples_list):
+        if FLAGS.num_images and idx >= FLAGS.num_images:
+            break
+        if idx % 100 == 0:
+            logging.info('On image %d of %d', idx, len(examples_list))
+        path = os.path.join(annotations_dir, example + '.xml')
+        with tf.io.gfile.GFile(path, 'r') as fid:
+            xml_str = fid.read()
+        xml = etree.fromstring(xml_str)
+        data = tfrecord_util.recursive_parse_xml_to_dict(xml)['annotation']
 
-            img_dir = os.path.join(FLAGS.data_dir, data['folder'], 'JPEGImages')
-            tf_example = dict_to_tf_example(
-                data,
-                img_dir,
-                label_map_dict,
-                FLAGS.ignore_difficult_instances,
-                ann_json_dict=ann_json_dict)
-            writers[idx % FLAGS.num_shards].write(tf_example.SerializeToString())
+        img_dir = os.path.join(FLAGS.data_dir, 'JPEGImages')
+        tf_example = dict_to_tf_example(
+            data,
+            img_dir,
+            label_map_dict,
+            FLAGS.ignore_difficult_instances,
+            ann_json_dict=ann_json_dict)
+        writers[idx % FLAGS.num_shards].write(tf_example.SerializeToString())
 
     for writer in writers:
         writer.close()
