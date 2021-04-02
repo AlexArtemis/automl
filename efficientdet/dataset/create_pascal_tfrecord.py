@@ -48,9 +48,6 @@ pascal_label_map_dict = {
     'truck': 6
 }
 
-GLOBAL_IMG_ID = 0  # global image id.
-GLOBAL_ANN_ID = 0  # global annotation id.
-
 
 def define_flags():
     """Define the flags."""
@@ -70,6 +67,7 @@ def define_flags():
     flags.DEFINE_integer('num_images', None, 'Max number of imags to process.')
 
 
+<<<<<<< HEAD
 def get_image_id(filename):
     """Convert a string to a integer."""
     # Warning: this function is highly specific to pascal filename!!
@@ -82,18 +80,36 @@ def get_image_id(filename):
     global GLOBAL_IMG_ID
     GLOBAL_IMG_ID += 1
     return GLOBAL_IMG_ID
+=======
+class UniqueId(object):
+  """Class to get the unique {image/ann}_id each time calling the functions."""
 
+  def __init__(self):
+    self.image_id = 0
+    self.ann_id = 0
+>>>>>>> upstream/master
 
+  def get_image_id(self):
+    self.image_id += 1
+    return self.image_id
+
+<<<<<<< HEAD
 def get_ann_id():
     """Return unique annotation id across images."""
     global GLOBAL_ANN_ID
     GLOBAL_ANN_ID += 1
     return GLOBAL_ANN_ID
+=======
+  def get_ann_id(self):
+    self.ann_id += 1
+    return self.ann_id
+>>>>>>> upstream/master
 
 
 def dict_to_tf_example(data,
                        images_dir,
                        label_map_dict,
+                       unique_id,
                        ignore_difficult_instances=False,
                        ann_json_dict=None):
     """Convert XML derived dict to tf.Example proto.
@@ -106,6 +122,8 @@ def dict_to_tf_example(data,
       tfrecord_util.recursive_parse_xml_to_dict)
     images_dir: Path to the directory holding raw images.
     label_map_dict: A map from string label names to integers ids.
+    unique_id: UniqueId object to get the unique {image/ann}_id for the image
+      and the annotations.
     ignore_difficult_instances: Whether to skip difficult instances in the
       dataset  (default: False).
     ann_json_dict: annotation json dictionary.
@@ -116,6 +134,7 @@ def dict_to_tf_example(data,
   Raises:
     ValueError: if the image pointed to by data['filename'] is not a valid JPEG
   """
+<<<<<<< HEAD
     full_path = os.path.join(images_dir, data['filename'])
     with tf.io.gfile.GFile(full_path, 'rb') as fid:
         encoded_jpg = fid.read()
@@ -134,6 +153,74 @@ def dict_to_tf_example(data,
             'height': height,
             'width': width,
             'id': image_id,
+=======
+  full_path = os.path.join(images_dir, data['filename'])
+  with tf.io.gfile.GFile(full_path, 'rb') as fid:
+    encoded_jpg = fid.read()
+  encoded_jpg_io = io.BytesIO(encoded_jpg)
+  image = PIL.Image.open(encoded_jpg_io)
+  if image.format != 'JPEG':
+    raise ValueError('Image format not JPEG')
+  key = hashlib.sha256(encoded_jpg).hexdigest()
+
+  image_id = unique_id.get_image_id()
+
+  width = int(data['size']['width'])
+  height = int(data['size']['height'])
+  if ann_json_dict:
+    image = {
+        'file_name': data['filename'],
+        'height': height,
+        'width': width,
+        'id': image_id,
+    }
+    ann_json_dict['images'].append(image)
+
+  xmin = []
+  ymin = []
+  xmax = []
+  ymax = []
+  area = []
+  classes = []
+  classes_text = []
+  truncated = []
+  poses = []
+  difficult_obj = []
+  if 'object' in data:
+    for obj in data['object']:
+      difficult = bool(int(obj['difficult']))
+      if ignore_difficult_instances and difficult:
+        continue
+
+      difficult_obj.append(int(difficult))
+
+      xmin.append(float(obj['bndbox']['xmin']) / width)
+      ymin.append(float(obj['bndbox']['ymin']) / height)
+      xmax.append(float(obj['bndbox']['xmax']) / width)
+      ymax.append(float(obj['bndbox']['ymax']) / height)
+      area.append((xmax[-1] - xmin[-1]) * (ymax[-1] - ymin[-1]))
+      classes_text.append(obj['name'].encode('utf8'))
+      classes.append(label_map_dict[obj['name']])
+      truncated.append(int(obj['truncated']))
+      poses.append(obj['pose'].encode('utf8'))
+
+      if ann_json_dict:
+        abs_xmin = int(obj['bndbox']['xmin'])
+        abs_ymin = int(obj['bndbox']['ymin'])
+        abs_xmax = int(obj['bndbox']['xmax'])
+        abs_ymax = int(obj['bndbox']['ymax'])
+        abs_width = abs_xmax - abs_xmin
+        abs_height = abs_ymax - abs_ymin
+        ann = {
+            'area': abs_width * abs_height,
+            'iscrowd': 0,
+            'image_id': image_id,
+            'bbox': [abs_xmin, abs_ymin, abs_width, abs_height],
+            'category_id': label_map_dict[obj['name']],
+            'id': unique_id.get_ann_id(),
+            'ignore': 0,
+            'segmentation': [],
+>>>>>>> upstream/master
         }
         ann_json_dict['images'].append(image)
 
@@ -228,6 +315,7 @@ def dict_to_tf_example(data,
 
 
 def main(_):
+<<<<<<< HEAD
     if FLAGS.set not in SETS:
         raise ValueError('set must be in : {}'.format(SETS))
     if FLAGS.year not in YEARS:
@@ -304,6 +392,87 @@ def main(_):
     print(json_file_path)
     with tf.io.gfile.GFile(json_file_path, 'w') as f:
         json.dump(ann_json_dict, f)
+=======
+  if FLAGS.set not in SETS:
+    raise ValueError('set must be in : {}'.format(SETS))
+  if FLAGS.year not in YEARS:
+    raise ValueError('year must be in : {}'.format(YEARS))
+  if not FLAGS.output_path:
+    raise ValueError('output_path cannot be empty.')
+
+  data_dir = FLAGS.data_dir
+  years = ['VOC2007', 'VOC2012']
+  if FLAGS.year != 'merged':
+    years = [FLAGS.year]
+
+  output_dir = os.path.dirname(FLAGS.output_path)
+  if not tf.io.gfile.exists(output_dir):
+    tf.io.gfile.makedirs(output_dir)
+  logging.info('Writing to output directory: %s', output_dir)
+
+  writers = [
+      tf.io.TFRecordWriter(FLAGS.output_path + '-%05d-of-%05d.tfrecord' %
+                           (i, FLAGS.num_shards))
+      for i in range(FLAGS.num_shards)
+  ]
+
+  if FLAGS.label_map_json_path:
+    with tf.io.gfile.GFile(FLAGS.label_map_json_path, 'rb') as f:
+      label_map_dict = json.load(f)
+  else:
+    label_map_dict = pascal_label_map_dict
+
+  ann_json_dict = {
+      'images': [],
+      'type': 'instances',
+      'annotations': [],
+      'categories': []
+  }
+
+  unique_id = UniqueId()
+  for year in years:
+    example_class = list(label_map_dict.keys())[1]
+    examples_path = os.path.join(data_dir, year, 'ImageSets', 'Main',
+                                 example_class + '_' + FLAGS.set + '.txt')
+    examples_list = tfrecord_util.read_examples_list(examples_path)
+    annotations_dir = os.path.join(data_dir, year, FLAGS.annotations_dir)
+
+    for class_name, class_id in label_map_dict.items():
+      cls = {'supercategory': 'none', 'id': class_id, 'name': class_name}
+      ann_json_dict['categories'].append(cls)
+
+    logging.info('Reading from PASCAL %s dataset.', year)
+    for idx, example in enumerate(examples_list):
+      if FLAGS.num_images and idx >= FLAGS.num_images:
+        break
+      if idx % 100 == 0:
+        logging.info('On image %d of %d', idx, len(examples_list))
+      path = os.path.join(annotations_dir, example + '.xml')
+      with tf.io.gfile.GFile(path, 'r') as fid:
+        xml_str = fid.read()
+      xml = etree.fromstring(xml_str)
+      data = tfrecord_util.recursive_parse_xml_to_dict(xml)['annotation']
+
+      img_dir = os.path.join(FLAGS.data_dir, data['folder'], 'JPEGImages')
+
+      tf_example = dict_to_tf_example(
+          data,
+          img_dir,
+          label_map_dict,
+          unique_id,
+          FLAGS.ignore_difficult_instances,
+          ann_json_dict=ann_json_dict)
+      writers[idx % FLAGS.num_shards].write(tf_example.SerializeToString())
+
+  for writer in writers:
+    writer.close()
+
+  json_file_path = os.path.join(
+      os.path.dirname(FLAGS.output_path),
+      'json_' + os.path.basename(FLAGS.output_path) + '.json')
+  with tf.io.gfile.GFile(json_file_path, 'w') as f:
+    json.dump(ann_json_dict, f)
+>>>>>>> upstream/master
 
 
 if __name__ == '__main__':

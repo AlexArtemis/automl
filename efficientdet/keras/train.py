@@ -56,7 +56,7 @@ def define_flags():
       help='GRPC URL of the eval master. Set to an appropriate value when '
       'running on CPU/GPU')
   flags.DEFINE_string('eval_name', default=None, help='Eval job name')
-  flags.DEFINE_enum('strategy', None, ['tpu', 'gpus', ''],
+  flags.DEFINE_enum('strategy', '', ['tpu', 'gpus', ''],
                     'Training: gpus for multi-gpu, if None, use TF default.')
 
   flags.DEFINE_integer(
@@ -90,7 +90,8 @@ def define_flags():
       'COCO validation JSON containing golden bounding boxes. If None, use the '
       'ground truth from the dataloader. Ignored if testdev_dir is not None.')
 
-  flags.DEFINE_string('mode', 'traineval', 'job mode: train, traineval.')
+  flags.DEFINE_enum('mode', 'traineval', ['train', 'traineval'],
+                    'job mode: train, traineval.')
   flags.DEFINE_string(
       'hub_module_url', None, 'TF-Hub path/url to EfficientDet module.'
       'If specified, pretrained_ckpt flag should not be used.')
